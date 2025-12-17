@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room XO - Code Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* --- CSS CŨ (GIỮ NGUYÊN) --- */
+        :root { --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%); --glass-bg: rgba(255, 255, 255, 0.7); --glass-border: rgba(255, 255, 255, 0.4); --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.15); --cell-size: 42px; --grid-gap: 2px; --color-x: #FF4757; --color-o: #2ED573; --color-text: #2f3542; --highlight-last: #ffeaa7; --win-color: #ffd32a; }
+        * { box-sizing: border-box; user-select: none; outline: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; background: var(--bg-gradient); background-size: 400% 400%; animation: gradientBG 15s ease infinite; height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: var(--color-text); }
+        @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .header { height: 80px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.05); z-index: 50; border-bottom: 1px solid var(--glass-border); }
+        .player-info { display: flex; gap: 20px; align-items: center; }
+        .player-card { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 12px; background: transparent; border: 2px solid transparent; transition: all 0.3s ease; opacity: 0.5; transform: scale(0.95); }
+        .player-card.active { background: white; border-color: #dfe4ea; box-shadow: 0 4px 12px rgba(0,0,0,0.1); opacity: 1; transform: scale(1.05); }
+        .player-icon { font-weight: 800; font-size: 1.5rem; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #f1f2f6; }
+        .player-card.x .player-icon { color: var(--color-x); } .player-card.o .player-icon { color: var(--color-o); }
+        .controls { display: flex; gap: 12px; align-items: center; }
+        .role-badge { padding: 8px 16px; background: #2f3542; color: white; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .room-badge { padding: 8px 16px; background: #fff; color: #667eea; border-radius: 20px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border: 2px solid #667eea; }
+        .btn { border: none; padding: 10px 16px; border-radius: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; background: white; color: #2f3542; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .btn-reset { background: #ff4757; color: white; }
+        #game-wrapper { flex: 1; display: flex; justify-content: center; align-items: center; overflow: auto; padding: 20px; background-image: radial-gradient(var(--glass-border) 1px, transparent 1px); background-size: 20px 20px; }
+        #board { display: grid; background-color: rgba(255,255,255,0.3); gap: var(--grid-gap); padding: 10px; border-radius: 16px; backdrop-filter: blur(4px); box-shadow: var(--shadow-lg); border: 1px solid rgba(255,255,255,0.5); }
+        .cell { width: var(--cell-size); height: var(--cell-size); background-color: rgba(255, 255, 255, 0.85); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; cursor: pointer; border-radius: 6px; transition: transform 0.1s, background-color 0.2s; position: relative; }
+        .cell:hover { background-color: #fff; transform: scale(1.05); z-index: 10; }
+        .cell.x { color: var(--color-x); } .cell.o { color: var(--color-o); }
+        .cell.pop { animation: popInCell 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .cell.last-move { background-color: var(--highlight-last); border: 2px solid #f1c40f; }
+        .cell.win { background-color: var(--win-color) !important; color: #fff !important; animation: winPulse 1s infinite; }
+        @keyframes popInCell { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes winPulse { 0% { box-shadow: 0 0 0 0 rgba(255, 211, 42, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 211, 42, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 211, 42, 0); } }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: opacity 0.3s; }
+        .modal-overlay.show { display: flex; opacity: 1; }
+        .modal-box { background: white; padding: 40px; border-radius: 24px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); transform: translateY(20px); transition: transform 0.3s; }
+        .modal-overlay.show .modal-box { transform: translateY(0); }
+        .modal-title { font-size: 24px; font-weight: 800; margin-bottom: 10px; color: #2f3542; }
+        .btn-primary { width: 100%; padding: 16px; background: linear-gradient(to right, #3742fa, #5352ed); color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; margin-top: 10px; }
+        
+        /* --- CSS MỚI: LOGIN SCREEN --- */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-gradient);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 2000;
+        }
+        .login-card {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 50px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            width: 90%; max-width: 450px;
+        }
+        .login-input {
+            width: 100%; padding: 16px;
+            margin: 20px 0;
+            border: 2px solid #dfe4ea;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            text-align: center;
+            font-weight: bold;
+            outline: none;
+            text-transform: uppercase;
+            transition: border-color 0.2s;
+        }
+        .login-input:focus { border-color: #3742fa; }
+
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-card">
+            <h1 style="color: #3742fa; font-size: 3rem; margin: 0;">XO ONLINE</h1>
+            <p style="color: #747d8c; margin-top: 10px;">Nhập mã phòng để chơi cùng bạn bè</p>
+            
+            <input type="text" id="room-input" class="login-input" placeholder="VÍ DỤ: 123" maxlength="10">
+            
+            <button class="btn-primary" onclick="joinGame()">VÀO PHÒNG NGAY</button>
+        </div>
+    </div>
+
+    <header class="header">
+        <div class="player-info">
+            <div id="card-x" class="player-card x active"><div class="player-icon">X</div></div>
+            <div id="card-o" class="player-card o"><div class="player-icon">O</div></div>
+        </div>
+        <div class="controls">
+            <div class="room-badge" id="room-display">CODE: ---</div>
+            <div class="role-badge" id="my-role-display">...</div>
+            <button class="btn btn-reset" onclick="requestReset()">⟲ Reset</button>
+        </div>
+    </header>
+
+    <div id="game-wrapper"><div id="board"></div></div>
+
+    <div id="result-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" style="font-size: 3rem;" id="result-title">🏆</div>
+            <div class="modal-desc" id="result-msg" style="font-size: 1.2rem; color: #2f3542; font-weight: 600;"></div>
+            <button class="btn-primary" onclick="requestReset()">Chơi lại</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // UI Elements
+        const loginScreen = document.getElementById('login-screen');
+        const roomInput = document.getElementById('room-input');
+        const boardEl = document.getElementById('board');
+        const roleDisplay = document.getElementById('my-role-display');
+        const roomDisplay = document.getElementById('room-display');
+        const resultModal = document.getElementById('result-modal');
+        const cardX = document.getElementById('card-x');
+        const cardO = document.getElementById('card-o');
+
+        // Game Config
+        const CELL_SIZE = 42;
+        const WIN_CONDITION = 5;
+        let rows, cols;
+        
+        // Game State
+        let myRoomCode = null;
+        let myRole = null;
+        let currentTurn = 'X';
+        let localBoard = {}; 
+
+        // 1. LOGIC ĐĂNG NHẬP
+        function joinGame() {
+            const code = roomInput.value.trim();
+            if(!code) {
+                alert("Vui lòng nhập mã phòng!");
+                return;
+            }
+            // Gửi yêu cầu lên server
+            socket.emit('joinRoom', code);
+        }
+
+        // Khi Server chấp nhận vào phòng
+        socket.on('roomJoined', (data) => {
+            // 1. Lưu thông tin
+            myRoomCode = data.roomCode;
+            myRole = data.role;
+            localBoard = data.roomData.board;
+            currentTurn = data.roomData.currentPlayer;
+
+            // 2. Ẩn Login, Hiện Game
+            loginScreen.style.display = 'none';
+            
+            // 3. Update UI Header
+            roomDisplay.innerText = `PHÒNG: ${myRoomCode}`;
+            if (myRole === 'Spectator') {
+                roleDisplay.innerText = "Khán giả";
+                roleDisplay.style.background = "#95a5a6";
+            } else {
+                roleDisplay.innerText = `Bạn là: ${myRole}`;
+                roleDisplay.style.background = myRole === 'X' ? 'var(--color-x)' : 'var(--color-o)';
+            }
+
+            // 4. Vẽ bàn cờ
+            initGrid();
+            reloadBoardView();
+            updateTurnUI();
+        });
+
+        // 2. SOCKET EVENTS (GAMEPLAY)
+        socket.on('updateMove', (data) => {
+            localBoard[`${data.r}-${data.c}`] = data.player;
+            currentTurn = data.nextTurn;
+            
+            drawMove(data.r, data.c, data.player);
+            updateTurnUI();
+
+            const winCells = checkWin(data.r, data.c, data.player);
+            if (winCells) showWin(data.player, winCells);
+        });
+
+        socket.on('gameReset', () => {
+            localBoard = {};
+            currentTurn = 'X';
+            reloadBoardView();
+            resultModal.classList.remove('show');
+            updateTurnUI();
+        });
+
+        // 3. LOCAL LOGIC
+        function initGrid() {
+            const w = document.getElementById('game-wrapper').clientWidth - 40;
+            const h = document.getElementById('game-wrapper').clientHeight - 40;
+            cols = Math.floor(w / (CELL_SIZE + 2));
+            rows = Math.floor(h / (CELL_SIZE + 2));
+            boardEl.style.gridTemplateColumns = `repeat(${cols}, ${CELL_SIZE}px)`;
+            boardEl.style.gridTemplateRows = `repeat(${rows}, ${CELL_SIZE}px)`;
+            boardEl.innerHTML = '';
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.loc = `${r}-${c}`;
+                    cell.onclick = () => handleMove(r, c);
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        function handleMove(r, c) {
+            if (myRole === 'Spectator' || currentTurn !== myRole) return;
+            if (localBoard[`${r}-${c}`]) return;
+            
+            // Gửi kèm roomCode
+            socket.emit('move', { roomCode: myRoomCode, r, c });
+        }
+
+        function requestReset() {
+            if(confirm("Bạn có chắc muốn Reset ván cờ không?")) {
+                socket.emit('reset', myRoomCode);
+            }
+        }
+
+        // --- HELPER FUNCTIONS ---
+        function drawMove(r, c, player) {
+            const cell = document.querySelector(`.cell[data-loc="${r}-${c}"]`);
+            if (cell) {
+                cell.innerText = player;
+                cell.classList.add(player.toLowerCase(), 'pop');
+                document.querySelectorAll('.last-move').forEach(el => el.classList.remove('last-move'));
+                cell.classList.add('last-move');
+            }
+        }
+
+        function reloadBoardView() {
+            document.querySelectorAll('.cell').forEach(c => {
+                c.innerText = '';
+                c.className = 'cell';
+            });
+            for (const key in localBoard) {
+                const [r, c] = key.split('-').map(Number);
+                const player = localBoard[key];
+                const cell = document.querySelector(`.cell[data-loc="${key}"]`);
+                if (cell) {
+                    cell.innerText = player;
+                    cell.classList.add(player.toLowerCase());
+                }
+            }
+        }
+
+        function updateTurnUI() {
+            if (currentTurn === 'X') {
+                cardX.classList.add('active'); cardO.classList.remove('active');
+            } else {
+                cardO.classList.add('active'); cardX.classList.remove('active');
+            }
+        }
+
+        function checkWin(r, c, player) {
+            const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+            for (let [dr, dc] of directions) {
+                let cells = [[r, c]];
+                let count = 1;
+                let i = 1;
+                while (localBoard[`${r + dr*i}-${c + dc*i}`] === player) {
+                    cells.push([r + dr*i, c + dc*i]); count++; i++;
+                }
+                i = 1;
+                while (localBoard[`${r - dr*i}-${c - dc*i}`] === player) {
+                    cells.push([r - dr*i, c - dc*i]); count++; i++;
+                }
+                if (count >= WIN_CONDITION) return cells;
+            }
+            return null;
+        }
+
+        function showWin(winner, cells) {
+            cells.forEach(([r, c]) => {
+                const cell = document.querySelector(`.cell[data-loc="${r}-${c}"]`);
+                if(cell) cell.classList.add('win');
+            });
+            setTimeout(() => {
+                document.getElementById('result-msg').innerText = `${winner} Chiến Thắng!`;
+                resultModal.classList.add('show');
+            }, 300);
+        }
+
+        // Xử lý Enter key ở input
+        roomInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") joinGame();
+        });
+
+    </script>
+</body>
+</html>
